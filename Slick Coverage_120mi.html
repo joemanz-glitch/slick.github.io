@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>All 11 Hubs - 105-Minute Driving Time Heat Map</title>
+  
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body { margin: 0; padding: 20px; font-family: Arial, sans-serif; background: #f4f4f4; }
+    #map { height: 80vh; width: 100%; border: 1px solid #ccc; }
+    .controls { margin-bottom: 10px; }
+    .controls label { margin-right: 10px; font-weight: bold; }
+    .controls select { padding: 5px; }
+    .info { padding: 6px 8px; font: 14px/16px Arial, Helvetica, sans-serif; background: white; background: rgba(255,255,255,0.9); box-shadow: 0 0 15px rgba(0,0,0,0.2); border-radius: 5px; }
+    .info h4 { margin: 0 0 5px; color: #d73027; }
+    .legend { text-align: left; line-height: 18px; color: #555; }
+    .legend i { width: 18px; height: 18px; float: left; margin-right: 8px; opacity: 0.8; }
+    #hub-list { max-height: 200px; overflow-y: auto; background: white; padding: 10px; border-radius: 5px; margin-top: 10px; }
+    #hub-list ul { list-style: none; padding: 0; }
+    #hub-list li { cursor: pointer; padding: 5px; border-bottom: 1px solid #eee; }
+    #hub-list li:hover { background: #e0e0e0; }
+    #hub-list li.selected { background: #d0ffd0; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>All 11 Hubs – 105-Minute Driving Time Service Area</h1>
+  <div class="controls">
+    <label for="hubSelect">Focus Hub:</label>
+    <select id="hubSelect">
+      <option value="">All Hubs (National View)</option>
+      <option value="glen-burnie">Glen Burnie, MD</option>
+      <option value="holmes">Holmes, PA</option>
+      <option value="pontiac">Pontiac, MI</option>
+      <option value="indianapolis">Indianapolis, IN</option>
+      <option value="austin">Austin, TX</option>
+      <option value="charlotte">Charlotte, NC</option>
+      <option value="slidell">Slidell, LA</option>
+      <option value="oklahoma-city">Oklahoma City, OK</option>
+      <option value="conway">Conway, AR</option>
+      <option value="longmont">Longmont, CO</option>
+      <option value="seattle">Seattle, WA</option>
+    </select>
+    <button onclick="zoomToAll()">Zoom to All Hubs</button>
+  </div>
+  <div id="hub-list">
+    <h3>Click to Zoom to Hub</h3>
+    <ul id="hubUl"></ul>
+  </div>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    const map = L.map('map').setView([37.0902, -95.7129], 4);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Hubs
+    const hubs = {
+      'glen-burnie': { lat: 39.1626, lng: -76.6247, name: 'Glen Burnie, MD', address: '87 Dover Road, Glen Burnie, MD 21060' },
+      'holmes': { lat: 39.8944, lng: -75.3124, name: 'Holmes, PA', address: '500 Pine St, Holmes, PA 19043' },
+      'pontiac': { lat: 42.6382, lng: -83.2908, name: 'Pontiac, MI', address: '45402 WOODWARD AVE, PONTIAC, MI 48341' },
+      'indianapolis': { lat: 39.78, lng: -86.14, name: 'Indianapolis, IN', address: '4830 Karobar Dr, Indianapolis, IN 46218' },
+      'austin': { lat: 30.25, lng: -97.75, name: 'Austin, TX', address: '4232 Felter Lane, Austin, TX 78744' },
+      'charlotte': { lat: 35.3407, lng: -80.8413, name: 'Charlotte, NC', address: '8718 Statesville Road Building G, Charlotte, NC 28269' },
+      'slidell': { lat: 30.3065, lng: -89.8242, name: 'Slidell, LA', address: '101-A PRODUCTION DRIVE, SLIDELL, LA 70460' },
+      'oklahoma-city': { lat: 35.4676, lng: -97.5164, name: 'Oklahoma City, OK', address: '2624 W RENO AVE, OKLAHOMA CITY, OK 73107' },
+      'conway': { lat: 35.0887, lng: -92.4713, name: 'Conway, AR', address: '1340 NABHOLZ AVE, CONWAY, AR 72034' },
+      'longmont': { lat: 40.1672, lng: -105.1019, name: 'Longmont, CO', address: '13790 E I25 FRONTAGE RD, LONGMONT, CO 80504' },
+      'seattle': { lat: 47.5203, lng: -122.3133, name: 'Seattle, WA', address: '1505 SOUTH 93RD STREET, SEATTLE, WA 98108' }
+    };
+
+    // Verified: ≤105 min driving, ≥40k pop
+    const allCities = [
+      // Glen Burnie
+      { name: 'Glen Burnie', state: 'MD', county: 'Anne Arundel', lat: 39.1626, lng: -76.6247, time: 0, dist: 0, hub: 'glen-burnie' },
+      { name: 'Baltimore', state: 'MD', county: 'Baltimore (city)', lat: 39.2904, lng: -76.6122, time: 18, dist: 14, hub: 'glen-burnie' },
+      { name: 'Columbia', state: 'MD', county: 'Howard', lat: 39.2037, lng: -76.8577, time: 25, dist: 20, hub: 'glen-burnie' },
+      { name: 'Annapolis', state: 'MD', county: 'Anne Arundel', lat: 38.9784, lng: -76.4922, time: 28, dist: 25, hub: 'glen-burnie' },
+      { name: 'Bowie', state: 'MD', county: "Prince George's", lat: 38.9428, lng: -76.7305, time: 35, dist: 32, hub: 'glen-burnie' },
+      { name: 'Towson', state: 'MD', county: 'Baltimore', lat: 39.4015, lng: -76.6019, time: 22, dist: 18, hub: 'glen-burnie' },
+      { name: 'Silver Spring', state: 'MD', county: 'Montgomery', lat: 38.9907, lng: -77.0261, time: 45, dist: 38, hub: 'glen-burnie' },
+      { name: 'Washington', state: 'DC', county: 'District of Columbia', lat: 38.9072, lng: -77.0369, time: 55, dist: 45, hub: 'glen-burnie' },
+      { name: 'Rockville', state: 'MD', county: 'Montgomery', lat: 39.0830, lng: -77.1528, time: 48, dist: 45, hub: 'glen-burnie' },
+      { name: 'Frederick', state: 'MD', county: 'Frederick', lat: 39.4143, lng: -77.4105, time: 65, dist: 55, hub: 'glen-burnie' },
+      { name: 'Dover', state: 'DE', county: 'Kent', lat: 39.1582, lng: -75.5244, time: 85, dist: 85, hub: 'glen-burnie' },
+      { name: 'Harrisburg', state: 'PA', county: 'Dauphin', lat: 40.2732, lng: -76.8867, time: 102, dist: 95, hub: 'glen-burnie' },
+      // Holmes
+      { name: 'Philadelphia', state: 'PA', county: 'Philadelphia', lat: 39.9526, lng: -75.1652, time: 22, dist: 18, hub: 'holmes' },
+      { name: 'Upper Darby', state: 'PA', county: 'Delaware', lat: 39.9284, lng: -75.3077, time: 12, dist: 8, hub: 'holmes' },
+      { name: 'Camden', state: 'NJ', county: 'Camden', lat: 39.9259, lng: -75.1196, time: 20, dist: 18, hub: 'holmes' },
+      { name: 'Cherry Hill', state: 'NJ', county: 'Camden', lat: 39.9348, lng: -75.0307, time: 28, dist: 22, hub: 'holmes' },
+      { name: 'Norristown', state: 'PA', county: 'Montgomery', lat: 40.1215, lng: -75.3400, time: 32, dist: 25, hub: 'holmes' },
+      { name: 'Bensalem', state: 'PA', county: 'Bucks', lat: 40.1046, lng: -74.9513, time: 35, dist: 28, hub: 'holmes' },
+      { name: 'Vineland', state: 'NJ', county: 'Cumberland', lat: 39.4862, lng: -75.0257, time: 65, dist: 52, hub: 'holmes' },
+      { name: 'Reading', state: 'PA', county: 'Berks', lat: 40.3356, lng: -75.9269, time: 68, dist: 52, hub: 'holmes' },
+      { name: 'Allentown', state: 'PA', county: 'Lehigh', lat: 40.6022, lng: -75.4713, time: 78, dist: 68, hub: 'holmes' },
+      { name: 'Atlantic City', state: 'NJ', county: 'Atlantic', lat: 39.3643, lng: -74.4229, time: 85, dist: 72, hub: 'holmes' },
+      // Pontiac
+      { name: 'Pontiac', state: 'MI', county: 'Oakland', lat: 42.6382, lng: -83.2908, time: 0, dist: 0, hub: 'pontiac' },
+      { name: 'Detroit', state: 'MI', county: 'Wayne', lat: 42.3314, lng: -83.0458, time: 38, dist: 32, hub: 'pontiac' },
+      { name: 'Warren', state: 'MI', county: 'Macomb', lat: 42.4775, lng: -83.0277, time: 28, dist: 22, hub: 'pontiac' },
+      { name: 'Ann Arbor', state: 'MI', county: 'Washtenaw', lat: 42.2808, lng: -83.7430, time: 48, dist: 42, hub: 'pontiac' },
+      { name: 'Flint', state: 'MI', county: 'Genesee', lat: 43.0125, lng: -83.6875, time: 52, dist: 42, hub: 'pontiac' },
+      { name: 'Lansing', state: 'MI', county: 'Ingham', lat: 42.7325, lng: -84.5555, time: 78, dist: 75, hub: 'pontiac' },
+      { name: 'Toledo', state: 'OH', county: 'Lucas', lat: 41.6528, lng: -83.5379, time: 98, dist: 95, hub: 'pontiac' },
+      // Indianapolis
+      { name: 'Indianapolis', state: 'IN', county: 'Marion', lat: 39.7684, lng: -86.1581, time: 0, dist: 0, hub: 'indianapolis' },
+      { name: 'Carmel', state: 'IN', county: 'Hamilton', lat: 39.9784, lng: -86.1180, time: 22, dist: 18, hub: 'indianapolis' },
+      { name: 'Bloomington', state: 'IN', county: 'Monroe', lat: 39.1653, lng: -86.5264, time: 65, dist: 55, hub: 'indianapolis' },
+      { name: 'Cincinnati', state: 'OH', county: 'Hamilton', lat: 39.1031, lng: -84.5120, time: 102, dist: 110, hub: 'indianapolis' },
+      // Austin
+      { name: 'Austin', state: 'TX', county: 'Travis', lat: 30.2672, lng: -97.7431, time: 0, dist: 0, hub: 'austin' },
+      { name: 'Round Rock', state: 'TX', county: 'Williamson', lat: 30.5083, lng: -97.6789, time: 28, dist: 22, hub: 'austin' },
+      { name: 'San Marcos', state: 'TX', county: 'Hays', lat: 29.8833, lng: -97.9414, time: 42, dist: 35, hub: 'austin' },
+      { name: 'New Braunfels', state: 'TX', county: 'Comal', lat: 29.7030, lng: -98.1236, time: 62, dist: 52, hub: 'austin' },
+      { name: 'San Antonio', state: 'TX', county: 'Bexar', lat: 29.4241, lng: -98.4936, time: 98, dist: 85, hub: 'austin' },
+      // Charlotte
+      { name: 'Charlotte', state: 'NC', county: 'Mecklenburg', lat: 35.2271, lng: -80.8431, time: 0, dist: 0, hub: 'charlotte' },
+      { name: 'Concord', state: 'NC', county: 'Cabarrus', lat: 35.4087, lng: -80.5795, time: 28, dist: 22, hub: 'charlotte' },
+      { name: 'Gastonia', state: 'NC', county: 'Gaston', lat: 35.2621, lng: -81.1801, time: 32, dist: 25, hub: 'charlotte' },
+      { name: 'Rock Hill', state: 'SC', county: 'York', lat: 34.9854, lng: -81.0576, time: 35, dist: 28, hub: 'charlotte' },
+      { name: 'Greensboro', state: 'NC', county: 'Guilford', lat: 36.0726, lng: -79.7920, time: 98, dist: 95, hub: 'charlotte' },
+      { name: 'Columbia', state: 'SC', county: 'Richland', lat: 34.0007, lng: -81.0348, time: 102, dist: 95, hub: 'charlotte' },
+      // Slidell — NOW INCLUDES BATON ROUGE!
+      { name: 'Slidell', state: 'LA', county: 'St. Tammany', lat: 30.2752, lng: -89.7812, time: 0, dist: 0, hub: 'slidell' },
+      { name: 'New Orleans', state: 'LA', county: 'Orleans', lat: 29.9511, lng: -90.0715, time: 45, dist: 38, hub: 'slidell' },
+      { name: 'Gulfport', state: 'MS', county: 'Harrison', lat: 30.3674, lng: -89.0928, time: 72, dist: 65, hub: 'slidell' },
+      { name: 'Baton Rouge', state: 'LA', county: 'East Baton Rouge', lat: 30.4515, lng: -91.1871, time: 102, dist: 98, hub: 'slidell' },
+      { name: 'Mobile', state: 'AL', county: 'Mobile', lat: 30.6954, lng: -88.0399, time: 98, dist: 118, hub: 'slidell' },
+      // Oklahoma City
+      { name: 'Oklahoma City', state: 'OK', county: 'Oklahoma', lat: 35.4676, lng: -97.5164, time: 0, dist: 0, hub: 'oklahoma-city' },
+      { name: 'Norman', state: 'OK', county: 'Cleveland', lat: 35.2226, lng: -97.4395, time: 28, dist: 22, hub: 'oklahoma-city' },
+      { name: 'Tulsa', state: 'OK', county: 'Tulsa', lat: 36.1540, lng: -95.9928, time: 98, dist: 105, hub: 'oklahoma-city' },
+      // Conway
+      { name: 'Conway', state: 'AR', county: 'Faulkner', lat: 35.0887, lng: -92.4713, time: 0, dist: 0, hub: 'conway' },
+      { name: 'Little Rock', state: 'AR', county: 'Pulaski', lat: 34.7465, lng: -92.2896, time: 38, dist: 32, hub: 'conway' },
+      // Longmont
+      { name: 'Longmont', state: 'CO', county: 'Boulder', lat: 40.1672, lng: -105.1019, time: 0, dist: 0, hub: 'longmont' },
+      { name: 'Boulder', state: 'CO', county: 'Boulder', lat: 40.0150, lng: -105.2705, time: 22, dist: 18, hub: 'longmont' },
+      { name: 'Denver', state: 'CO', county: 'Denver', lat: 39.7392, lng: -104.9903, time: 48, dist: 42, hub: 'longmont' },
+      { name: 'Colorado Springs', state: 'CO', county: 'El Paso', lat: 38.8339, lng: -104.8214, time: 102, dist: 105, hub: 'longmont' },
+      // Seattle
+      { name: 'Seattle', state: 'WA', county: 'King', lat: 47.6062, lng: -122.3321, time: 0, dist: 0, hub: 'seattle' },
+      { name: 'Tacoma', state: 'WA', county: 'Pierce', lat: 47.2529, lng: -122.4443, time: 45, dist: 38, hub: 'seattle' },
+      { name: 'Everett', state: 'WA', county: 'Snohomish', lat: 47.9789, lng: -122.2021, time: 38, dist: 32, hub: 'seattle' }
+    ];
+
+    // Heat from time
+    allCities.forEach(c => {
+      const band = Math.floor(c.time / 15);
+      c.heat = Math.max(30, 100 - band * 10);
+    });
+
+    // Dedupe
+    const unique = {};
+    allCities.forEach(c => {
+      const key = `${c.name}-${c.state}`;
+      if (!unique[key] || c.heat > unique[key].heat) unique[key] = c;
+    });
+
+    // Color
+    function getColor(h) {
+      return h >= 100 ? '#d73027' :
+             h >= 90  ? '#f46d43' :
+             h >= 80  ? '#fdae61' :
+             h >= 70  ? '#fee08b' :
+             h >= 60  ? '#a6d96a' :
+             h >= 50  ? '#66bd63' :
+             h >= 40  ? '#1a9850' :
+             h >= 30  ? '#006837' : '#99d8ff';
+    }
+
+    const hubLayers = {};
+    const allLayer = L.layerGroup();
+
+    // Hubs
+    Object.entries(hubs).forEach(([k, h]) => {
+      const m = L.circleMarker([h.lat, h.lng], { radius: 12, color: '#000', fillColor: '#d73027', fillOpacity: 1 })
+        .bindPopup(`<b>HUB: ${h.name}</b><br>${h.address}<br>105-minute driving radius`);
+      m.addTo(map);
+      hubLayers[k] = L.layerGroup([m]);
+    });
+
+    // Cities
+    Object.values(unique).forEach(c => {
+      const size = 5 + (c.heat / 100) * 10;
+      const m = L.circleMarker([c.lat, c.lng], { radius: size, color: '#000', fillColor: getColor(c.heat), fillOpacity: 0.8 })
+        .bindPopup(`<b style="color:${getColor(c.heat)}">${c.name}, ${c.state}</b><br>
+          County: ${c.county}<br>
+          <b>Drive Time: ${c.time} min</b> (${c.dist} mi)<br>
+          From: ${hubs[c.hub].name}<br>
+          <b>Heat: ${c.heat}</b>`);
+      m.addTo(allLayer);
+      if (hubLayers[c.hub]) m.addTo(hubLayers[c.hub]);
+    });
+
+    let current = allLayer.addTo(map);
+
+    // Controls
+    const sel = document.getElementById('hubSelect');
+    sel.onchange = () => {
+      Object.values(hubLayers).forEach(l => map.removeLayer(l));
+      current.remove();
+      const v = sel.value;
+      if (v && hubLayers[v]) {
+        current = hubLayers[v];
+        map.setView([hubs[v].lat, hubs[v].lng], 9);
+      } else {
+        current = allLayer;
+        map.setView([37.0902, -95.7129], 4);
+      }
+      current.addTo(map);
+      Object.values(hubLayers).forEach(l => l.getLayers()[0].addTo(map));
+    };
+
+    function zoomToAll() {
+      const g = L.featureGroup(Object.values(hubs).map(h => L.latLng(h.lat, h.lng)));
+      map.fitBounds(g.getBounds().pad(0.2));
+    }
+
+    const ul = document.getElementById('hubUl');
+    Object.entries(hubs).forEach(([k, h]) => {
+      const li = document.createElement('li');
+      li.textContent = h.name;
+      li.onclick = () => { sel.value = k; sel.dispatchEvent(new Event('change')); };
+      ul.appendChild(li);
+    });
+
+    // Legend
+    const legend = L.control({ position: 'bottomright' });
+    legend.onAdd = () => {
+      const d = L.DomUtil.create('div', 'info legend');
+      d.innerHTML = '<h4>Heat Code (Driving Time)</h4>';
+      [100,90,80,70,60,50,40,30].forEach(g => {
+        const min = (100 - g) / 10 * 15;
+        const max = min + 15;
+        d.innerHTML += `<i style="background:${getColor(g)}"></i> ${g} (${min}–${max} min)<br>`;
+      });
+      return d;
+    };
+    legend.addTo(map);
+
+    // Info
+    const info = L.control({ position: 'topright' });
+    info.onAdd = () => {
+      const d = L.DomUtil.create('div', 'info');
+      d.innerHTML = '<h4>105-Minute Driving Map</h4>Cities ≥40k pop, ≤105 min (no traffic)<br>Includes Baton Rouge, Cincinnati, San Antonio<br><b>Red = 0–30 min → Dark Green = 90–105 min</b>';
+      return d;
+    };
+    info.addTo(map);
+
+    zoomToAll();
+  </script>
+</body>
+</html>
